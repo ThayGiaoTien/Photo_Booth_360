@@ -186,13 +186,13 @@ void system_on_off()
   { 
     digitalWrite(LED_STATUS, HIGH);
     startMotor();
-    tone(BUZZER_PIN, 1000, 1000);  // Long beep
+    tone(BUZZER_PIN, 1000, 200);  // Long beep
   }
   else
   {
     digitalWrite(LED_STATUS, LOW);
     stopMotor();
-    tone(BUZZER_PIN, 1000, 1000);  // Long beep
+    tone(BUZZER_PIN, 1000, 200);  // Long beep
   }
   
 }
@@ -209,7 +209,8 @@ void wled_on_off()
   }
 }
 
-// Analog value is in range 0-255.
+// ====================Analog value is in range 0-255.
+//Add an explicit else to clear both outputs if currentDir == 0. This avoids any ambiguous states
 void writePWM(int duty)
 {
   duty = constrain(duty, 0, PWM_MAX);
@@ -221,7 +222,12 @@ void writePWM(int duty)
     analogWrite(IN2_PIN, 0);           // IN2 LOW
     analogWrite(IN1_PIN, duty);        // PWM on IN1
   }
+  else {                               // stopped or invalid dir -> ensure both LOW
+    analogWrite(IN1_PIN, 0);
+    analogWrite(IN2_PIN, 0);
+  }
 }
+
 
 // ================== START FORWARD ==================
 void startMotor()
@@ -282,19 +288,30 @@ void decreaseSpeed()
 }
 
 
-// ================== SAFE REVERSE ==================
+// ================== SAFE REVERSE (improved) ==================
 void reverseMotor()
 {
-  if (currentDir == 0) return;
+  // If currently stopped, start in reverse from 0 -> DEFAULT_SPEED
+  if (currentDir == 0) {
+    currentDir = -1;               // set direction to reverse
+    int target = DEFAULT_SPEED;
+    for (int v = 0; v <= target; v += RAMP_STEP) {
+      writePWM(v);
+      delay(RAMP_DELAY);
+    }
+    currentSpeed = target;
+    return;
+  }
+
+  // If running, smoothly stop and ramp up in opposite direction
   int previousSpeed = currentSpeed;
-  int previousDir = currentDir;       // save CURRENT direction BEFORE stopping => Fixed
-  stopMotor();                 // smooth decel → stop
-  currentDir = -previousDir;    // flip direction
+  int previousDir = currentDir;     // save dir BEFORE stopping
+  stopMotor();                      // smooth decel and sets currentDir=0
+  currentDir = -previousDir;        // flip direction using saved value
   for (int v = 0; v <= previousSpeed; v += RAMP_STEP) {
     writePWM(v);
     delay(RAMP_DELAY);
   }
-
   currentSpeed = previousSpeed;
 }
 
