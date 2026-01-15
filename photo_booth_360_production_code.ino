@@ -19,6 +19,7 @@ bool sleeping=false;
 #define STATUS 19 // Active LOW LED
 
 // ===== RF CODES =====
+
 #define B1 9404264UL
 #define B2 9404260UL
 #define B3 9404268UL
@@ -45,6 +46,9 @@ const uint8_t EFFECT_COUNT=9;
 uint8_t r=255,g=0,b=0;
 
 // ===== MOTOR =====
+bool coasting=false;
+unsigned long coastStart=0;
+#define COAST_TIME 1000   // ms
 int currentSpeed=0;
 int targetSpeed=0;
 int currentDir=1;
@@ -77,21 +81,45 @@ void wakeUp(){
 
 // ===== PWM =====
 void writePWM(int v){
-  if(currentDir==1){ analogWrite(IN1,0); analogWrite(IN2,v); }
-  else if(currentDir==-1){ analogWrite(IN2,0); analogWrite(IN1,v); }
-  else{ analogWrite(IN1,0); analogWrite(IN2,0); }
+  if(currentDir==1){
+    analogWrite(IN1,0);
+    analogWrite(IN2,v);
+  }
+  else if(currentDir==-1){
+    analogWrite(IN2,0);
+    analogWrite(IN1,v);
+  }
+  else{
+    analogWrite(IN1,0);
+    analogWrite(IN2,0);   // COAST
+  }
 }
 
 // ===== MOTOR FSM =====
 void updateMotor(){
   if(millis()-lastRamp<RAMP_DELAY) return;
 
+  // Save the driver!!!!
+  if(coasting){
+    if(millis() - coastStart < COAST_TIME){
+        writePWM(0);    // both pins LOW → coast
+        return;
+    }else{
+        coasting=false;
+        currentDir = targetDir;
+        targetSpeed = speedTable[speedLevel];
+    }
+}
+
   if(currentSpeed==0 && currentDir!=targetDir){
-    currentDir=targetDir;
-    targetSpeed=speedTable[speedLevel];
-    lastRamp=millis();
+    // enter coast before reversing
+    coasting=true;
+    coastStart=millis();
+    currentDir=0;        // coast mode
+    writePWM(0);
+    lastRamp=millis();  
     return;
-  }
+}
 
   lastRamp=millis();
 
